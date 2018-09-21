@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>netcoreapp2.1</TargetFramework>
+    <OutputPath>..\..\bin</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <GACJ_RINGING_PATH Condition="'$(GACJ_RINGING_PATH)'==''">..\..\..\gacj\bin\Release\netstandard2.0\GACJ.Ringing.dll</GACJ_RINGING_PATH>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="GACJ.Ringing">
+      <HintPath>$(GACJ_RINGING_PATH)</HintPath>
+    </Reference>
+  </ItemGroup>
+
+</Project>
