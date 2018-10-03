@@ -39,10 +39,98 @@ namespace improve
             var rows = ParseRows(path);
             if (rows.Length == 1)
                 return 0;
+            bool isRoundBlock = rows.First() == rows.Last();
 
-            ExtendedProof(rows);
+            if (isRoundBlock)
+                AcceptedTruth(rows.TakeAllButLast().ToArray());
+            else
+                AcceptedTruth(rows);
+            //ExtendedProof(rows);
 
             return 0;
+        }
+
+        private static void AcceptedTruth(Row[] rows)
+        {
+            // Stage
+            int stage = rows[0].Stage;
+            int factorial = (int)Stage.GetFactorial(stage); 
+
+            // Allocate all rows to extent buckets (no duplicates in each bucket)
+            var eBuckets = new List<Dictionary<int,Row>>();
+            foreach (var r in rows)
+                AddRow(r, eBuckets);
+            int pStage = stage;
+            // Check buckets for completeness at row stage
+            int numExtents = 0;
+            foreach (var b in eBuckets)
+            {
+                if (b.Count() == factorial)
+                {
+                    numExtents++;
+                    continue;
+                }
+                if (numExtents > 1)
+                    Console.WriteLine($"Touch contains {numExtents} {Stage.GetName(pStage)} {ExtentText(numExtents)}.");
+                break;
+            }
+            // Remove complete buckets
+            for (int i = numExtents - 1; i >= 0; i--)
+                eBuckets.RemoveAt(i);
+
+            // Check buckets for completeness at progressively lower stages
+            pStage--;
+            factorial = (int)Stage.GetFactorial(pStage);
+            foreach (var eb in eBuckets)
+            {
+                // Count by position to identify fixed bells
+
+                var bellCount = new int[stage];
+                foreach (var r in eb)
+                {
+                    var pos = r.Value.GetBellPositions();
+                    foreach (var b in pos)
+                        bellCount[b]++;
+                }
+                                   
+
+                if (eb.Count() == factorial)
+                {
+                    numExtents++;
+                    continue;
+                }
+                if (numExtents > 1)
+                    Console.WriteLine($"Touch contains {numExtents} {Stage.GetName(pStage)} {ExtentText(numExtents)}.");
+                break;
+            }
+
+
+
+
+        }
+
+        private static void AddRow(Row row, List<Dictionary<int,Row>> eBuckets)
+        {
+            bool rowProcessed = false;
+            var hash = row.GetHashCode();
+            // Add row to first available bucket that does not already contain the row
+            foreach (var e in eBuckets)
+            {
+                if (e.TryAdd(hash, row))
+                {
+                    rowProcessed = true;
+                    break;
+                }
+            }
+
+            // Create new bucket if none available
+            if (!rowProcessed)
+            {
+                var bucket = new Dictionary<int,Row>();
+                bucket.Add(hash, row);
+                eBuckets.Add(bucket);
+                rowProcessed = true;
+            }
         }
 
         private static void ExtendedProof(Row[] rows)
