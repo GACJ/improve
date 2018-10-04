@@ -40,73 +40,118 @@ namespace improve
             if (rows.Length == 1)
                 return 0;
             bool isRoundBlock = rows.First() == rows.Last();
+            int rowStage = rows[0].Stage;
+            Row[] block;
 
             if (isRoundBlock)
-                AcceptedTruth(rows.TakeAllButLast().ToArray());
+            {
+                block = rows.TakeAllButLast().ToArray();
+                Console.WriteLine($"Proving a Round Block of {block.Length} {Stage.GetName(rowStage)} rows.");
+            }
             else
-                AcceptedTruth(rows);
-            //ExtendedProof(rows);
+            {
+                block = rows;
+                Console.WriteLine($"Proving a non-Round Block of {block.Length} {Stage.GetName(rowStage)} rows.");
+            }
+
+            Row fixedBells;
+            int effectiveStage = rowStage;
+            if (BlockHasFixedBells(block, out fixedBells))
+            {
+                int numFixedBells = fixedBells.Count(x => x != 255);
+                effectiveStage = rowStage - numFixedBells;
+                Console.WriteLine($"There are {numFixedBells} fixed bells ({fixedBells}) - the Effective Stage is {Stage.GetName(effectiveStage)}.");
+            }
+            else
+            {
+                Console.WriteLine($"There are no fixed bells - the Effective Stage is {Stage.GetName(effectiveStage)}.");
+            }
+
+            MultiStageTruth(block, fixedBells);
+
+            // Try identifying extents at next lower stage
+            //for (int i = 0; i < fixedBells.Stage; i++)
+            //{
+            //    if (fixedBells[i] == 255)
+            //    {
+            //        var fixedB = fixedBells.ToArray();
+            //        var processRows = eBuckets[0].Values.ToArray();
+            //        var rowGrps = processRows.GroupBy(x => x[i]).OrderBy(y => y.Key);
+            //        var newRows = new List<Row>();
+            //        int newEffectiveStage = rowStage - numFixedBells;
+            //        int numRows = (int)Stage.GetFactorial(newEffectiveStage);
+            //        foreach (var grp in rowGrps)
+            //        {
+            //            fixedB[i] = grp.Key;
+            //            Row newFixedBells = new Row(fixedB);
+            //            if (grp.Count() >= numRows)
+            //            {
+            //                newRows.AddRange(MultiStageTruth(grp.ToArray(), newFixedBells));
+            //            }
+            //            else
+            //            {
+            //                newRows.AddRange(grp.ToArray());
+            //            }
+            //        }
+            //    }
+            //}
 
             return 0;
         }
 
-        private static void AcceptedTruth(Row[] rows)
+        private static Row[] MultiStageTruth(Row[] rows, Row fixedBells)
         {
             // Stage
-            int stage = rows[0].Stage;
-            int factorial = (int)Stage.GetFactorial(stage); 
+            int rowStage = rows[0].Stage;
+            int numFixedBells = fixedBells.Count(x => x != 255);
+            int effectiveStage = rowStage - numFixedBells;
+            int numRowsInExtent = (int)Stage.GetFactorial(effectiveStage); 
 
             // Allocate all rows to extent buckets (no duplicates in each bucket)
             var eBuckets = new List<Dictionary<int,Row>>();
             foreach (var r in rows)
                 AddRow(r, eBuckets);
-            int pStage = stage;
-            // Check buckets for completeness at row stage
+            // Check buckets for completeness at the effective stage
             int numExtents = 0;
             foreach (var b in eBuckets)
             {
-                if (b.Count() == factorial)
+                if (b.Count() == numRowsInExtent)
                 {
                     numExtents++;
                     continue;
                 }
-                if (numExtents > 1)
-                    Console.WriteLine($"Touch contains {numExtents} {Stage.GetName(pStage)} {ExtentText(numExtents)}.");
+
                 break;
             }
+
+            // Report extents found
+            if (numExtents >= 1)
+            {
+                if (effectiveStage == rowStage)
+                    Console.WriteLine($"Block contains {numExtents} {Pluralise("extent", numExtents)} of {Stage.GetName(effectiveStage)}.");
+                else
+                    Console.WriteLine($"Block contains {numExtents} {Pluralise("extent", numExtents)} of {Stage.GetName(effectiveStage)} with {numFixedBells} fixed {Pluralise("bell", numFixedBells)} ({fixedBells}).");
+            }
+            
             // Remove complete buckets
             for (int i = numExtents - 1; i >= 0; i--)
                 eBuckets.RemoveAt(i);
 
-            // Check buckets for completeness at progressively lower stages
-            pStage--;
-            factorial = (int)Stage.GetFactorial(pStage);
-            foreach (var eb in eBuckets)
+            // Check whether the remaining rows are distinct
+            if (eBuckets.Count() == 0)
             {
-                // Count by position to identify fixed bells
-
-                var bellCount = new int[stage];
-                foreach (var r in eb)
-                {
-                    var pos = r.Value.GetBellPositions();
-                    foreach (var b in pos)
-                        bellCount[b]++;
-                }
-                                   
-
-                if (eb.Count() == factorial)
-                {
-                    numExtents++;
-                    continue;
-                }
-                if (numExtents > 1)
-                    Console.WriteLine($"Touch contains {numExtents} {Stage.GetName(pStage)} {ExtentText(numExtents)}.");
-                break;
+                Console.WriteLine($"All extents are complete.");
+                return new Row[0];
+            }
+            else if (eBuckets.Count() == 1)
+            {
+                Console.WriteLine($"Block contains {eBuckets.First().Count()} distinct rows from one extent of {Stage.GetName(rowStage)}.");
+                return new Row[0];
             }
 
-
-
-
+            // Recombine remaining rows
+            var remainder = eBuckets.SelectMany(x => x.Values).ToArray();
+            return remainder;
         }
 
         private static void AddRow(Row row, List<Dictionary<int,Row>> eBuckets)
@@ -184,7 +229,7 @@ namespace improve
                             newRows.Add(row);
                         }
                     }
-                    Console.WriteLine($"Contains {numExtents} {Stage.GetName(testStage)} {ExtentText(numExtents)} with {new Row(fixedbells)} as fixed bell(s).");
+                    Console.WriteLine($"Contains {numExtents} {Stage.GetName(testStage)} {Pluralise("extent", numExtents)} with {new Row(fixedbells)} as fixed bell(s).");
                 }
                 else
                     newRows.AddRange(grp);
@@ -219,8 +264,8 @@ namespace improve
             else
                 Console.WriteLine($"Touch is false with {ps.FalseRows} repeated rows.");
 
-            Console.WriteLine($"Contains {ps.CompleteExtents} complete {ExtentText(ps.CompleteExtents)}.");
-            Console.WriteLine($"Contains {ps.IncompleteExtents} incomplete {ExtentText(ps.IncompleteExtents)}.");
+            Console.WriteLine($"Contains {ps.CompleteExtents} complete {Pluralise("extent", ps.CompleteExtents)}.");
+            Console.WriteLine($"Contains {ps.IncompleteExtents} incomplete {Pluralise("extent", ps.IncompleteExtents)}.");
 
             // Check for Round Block
             if (ps.IsRoundBlock)
@@ -288,11 +333,52 @@ namespace improve
             Console.WriteLine("Usage: improve <input>");
         }
 
-        private static string ExtentText(int numExtents)
+        private static string Pluralise(string word, int number)
         {
-            if (numExtents == 1)
-                return "extent";
-            return "extents";
+            if (number == 1)
+                return word;
+            return word + "s";
+        }
+
+        private static bool BlockHasFixedBells(Row[] rows, out Row fixedbells)
+        {
+            int stage = rows[0].Stage;
+            byte[] fbells = rows.First().ToArray();
+            // Determine fixed bells
+            foreach (var r in rows)
+            {
+                for (int i = 0; i < stage; i++)
+                {
+                    if (r[i] != fbells[i])
+                        fbells[i] = 255;
+                }
+            }
+
+            fixedbells = new Row(fbells);
+
+            foreach (var b in fbells)
+            {
+                if (b != 255)
+                    return true;
+            }
+
+            return false;
+        }
+
+        private static int[,] BellDistribution(Row[] rows)
+        {
+            int stage = rows[0].Stage;
+            var dist = new int[stage, stage];
+            // Count the occasions each bell occurs in each position
+            foreach (var r in rows)
+            {
+                for (int pos = 0; pos < stage; pos++)
+                {
+                    dist[pos, (int)r[pos]]++;
+                }
+            }
+
+            return dist;
         }
     }
 }
